@@ -1,0 +1,5 @@
+Archive:  xseman06.zip
+  inflating: parse.py                
+  inflating: readme1.md              
+This program parses the IPPcode24 from stdin to XML format
+Usage: python3 parse.py < input_file > output_file
