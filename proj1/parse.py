@@ -1,16 +1,16 @@
 # file: parse.py
 # author: Boris Semanco (xseman06)
-# description: This program parses the IPPcode24 from stdin to XML format
 
 import sys
 import xml.etree.ElementTree as ET
+import re
 
 
 # error codes
-INVALID_ARGS = 10       # chybné parametry příkazové řádky
-MISSING_HEADER = 21     # chybná nebo chybějící hlavička ve zdrojovém kódu zapsaném v IPPcode24
-INVALID_OPERATION = 22  # neznámý nebo chybný operační kód ve zdrojovém kódu zapsaném v IPPcode24
-OTHER_LEX_SYNT = 23     # jiná lexikální nebo syntaktická chyba zdrojového kódu zapsaného v IPPcode24
+INVALID_ARGS = 10
+MISSING_HEADER = 21
+INVALID_OPERATION = 22
+OTHER_LEX_SYNT = 23
 
 
 # adds instruction to the xml
@@ -44,6 +44,10 @@ def StringParse(string):
 
     return string
             
+# checks if the label name is valid
+def CheckLabelName(label):
+    pattern = r'^[-_$&%*!?][_$&%*!?a-zA-Z]*$|^[a-zA-Z][a-zA-Z]*$'
+    return bool(re.match(pattern, label))
 
 # returns the type and text of the argument
 def GetTypeAndText(arg):
@@ -117,11 +121,23 @@ def GetTypeAndText(arg):
 
     return [arg_type, arg_text]
 
+# checks if the variable name is valid
+def CheckVarName(var):
+    pattern = r'^[-_$&%*!?a-zA-Z][_$&%*!?a-zA-Z0-9]*$'
+    return bool(re.match(pattern, var))
+
 # checks if the variable is valid
 def CheckVar(var):
     frame = var.split('@')
     if frame[0] not in ["GF", "LF", "TF"]:
         sys.exit(OTHER_LEX_SYNT)
+
+    if len(frame) != 2:
+        sys.exit(OTHER_LEX_SYNT)
+
+    if not CheckVarName(frame[1]):
+        sys.exit(OTHER_LEX_SYNT)
+        
     return var
 
 # prints help for --help argument
@@ -131,7 +147,6 @@ def PrintHelp():
 
 # parses the input to XML
 def Parse():    
-
     # checks for --help
     if len(sys.argv) == 2:
         if sys.argv[1] == "--help":
@@ -143,7 +158,6 @@ def Parse():
     elif len(sys.argv) > 2:
         print("Invalid number of arguments", file=sys.stderr)
         sys.exit(INVALID_ARGS)
-
 
     # reads the stdin and splits it into lines
     raw_lines = sys.stdin.readlines()
@@ -162,6 +176,10 @@ def Parse():
         opcode = args[0]
         args = args[1:]
 
+        # skips empty lines
+        if opcode == "":
+            continue
+
         if opcode == ".IPPcode24":
             if header_found:
                 print("Multiple headers", file=sys.stderr)
@@ -170,9 +188,11 @@ def Parse():
                 header_found = True
             continue
 
-        # keeps skipping till header is found
-        if opcode == "" or not header_found:
-            continue
+        # if header was not found as the first non-empty line, exit
+        if not header_found:
+            print("Header not found", file=sys.stderr)
+            sys.exit(MISSING_HEADER)
+
 
         opcode = opcode.upper()
 
@@ -188,6 +208,11 @@ def Parse():
             if IsEnoughArgs(args, 1):
                 instruction = AddInstruction(xml_out, opcode, token_counter)
                 token_counter += 1
+
+                if not CheckLabelName(args[0]):
+                    print("Invalid label name", file=sys.stderr)
+                    sys.exit(OTHER_LEX_SYNT)
+
                 ET.SubElement(instruction, 'arg1', type='label').text = args[0]
 
         # opcode label symb1 symb2
@@ -195,6 +220,11 @@ def Parse():
             if IsEnoughArgs(args, 3):
                 instruction = AddInstruction(xml_out, opcode, token_counter)
                 token_counter += 1
+
+                if not CheckLabelName(args[0]):
+                    print("Invalid label name", file=sys.stderr)
+                    sys.exit(OTHER_LEX_SYNT)
+
                 ET.SubElement(instruction, 'arg1', type='label').text = args[0]
                 for i in range(1, 3):
                     arg_type, arg_text = GetTypeAndText(args[i])
@@ -253,13 +283,10 @@ def Parse():
             print("Invalid opcode", file=sys.stderr)
             sys.exit(INVALID_OPERATION)
 
-    if not header_found:
-        print("Header not found", file=sys.stderr)
-        sys.exit(MISSING_HEADER)
-
     ET.indent(xml_out)
     xml_str = ET.tostring(xml_out, encoding='UTF-8', xml_declaration=True)
     sys.stdout.buffer.write(xml_str)
 
 if __name__ == "__main__":
     Parse()
+
