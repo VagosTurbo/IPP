@@ -1,2 +1,0 @@
-test:
-	bash ./test.sh
